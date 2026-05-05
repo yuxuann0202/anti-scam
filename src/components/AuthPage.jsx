@@ -131,31 +131,7 @@ function AuthPage({ t }) {
         <div className="auth-blob auth-blob--2" />
         <div className="auth-blob auth-blob--3" />
         <div className="auth-blob auth-blob--4" />
-        <div className="auth-cube auth-cube--lg" style={{ top: '10%', left: '7%' }}>
-          <div className="auth-cube-face auth-cube-face--front" />
-          <div className="auth-cube-face auth-cube-face--back" />
-          <div className="auth-cube-face auth-cube-face--left" />
-          <div className="auth-cube-face auth-cube-face--right" />
-          <div className="auth-cube-face auth-cube-face--top" />
-          <div className="auth-cube-face auth-cube-face--bottom" />
-        </div>
-        <div className="auth-cube auth-cube--sm" style={{ bottom: '12%', right: '8%' }}>
-          <div className="auth-cube-face auth-cube-face--front" />
-          <div className="auth-cube-face auth-cube-face--back" />
-          <div className="auth-cube-face auth-cube-face--left" />
-          <div className="auth-cube-face auth-cube-face--right" />
-          <div className="auth-cube-face auth-cube-face--top" />
-          <div className="auth-cube-face auth-cube-face--bottom" />
-        </div>
-        <div className="auth-cube auth-cube--xs" style={{ top: '55%', left: '4%' }}>
-          <div className="auth-cube-face auth-cube-face--front" />
-          <div className="auth-cube-face auth-cube-face--back" />
-          <div className="auth-cube-face auth-cube-face--left" />
-          <div className="auth-cube-face auth-cube-face--right" />
-          <div className="auth-cube-face auth-cube-face--top" />
-          <div className="auth-cube-face auth-cube-face--bottom" />
-        </div>
-        <div className="auth-hex auth-hex--1" />
+<div className="auth-hex auth-hex--1" />
         <div className="auth-hex auth-hex--2" />
         <div className="auth-hex auth-hex--3" />
         <div className="auth-ring auth-ring--1" />
