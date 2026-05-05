@@ -34,20 +34,23 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Initialize Gemini (used for message scanning + translation)
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-preview-05-20' });
+const fallbackModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
-// Retry wrapper for transient Gemini 500/503 errors
+// Retry wrapper — tries 2.5 flash first, falls back to 2.0 flash on 503/500
 async function geminiGenerateWithRetry(promptOrParts, maxAttempts = 3) {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const useModel = attempt <= 2 ? model : fallbackModel;
+    const modelName = attempt <= 2 ? 'gemini-2.5-flash' : 'gemini-2.0-flash (fallback)';
     try {
-      const result = await model.generateContent(promptOrParts);
+      const result = await useModel.generateContent(promptOrParts);
       return result;
     } catch (err) {
       const status = err?.status ?? err?.response?.status;
-      const isTransient = status === 500 || status === 503 || err.message?.includes('Internal error');
+      const isTransient = status === 500 || status === 503 || err.message?.includes('Internal error') || err.message?.includes('high demand');
       if (isTransient && attempt < maxAttempts) {
-        const delay = 1000 * attempt; // 1s, 2s
-        console.warn(`[Gemini] Attempt ${attempt} failed (${status ?? err.message}), retrying in ${delay}ms…`);
+        const delay = 1000 * attempt;
+        console.warn(`[Gemini] ${modelName} attempt ${attempt} failed (${status ?? err.message}), retrying in ${delay}ms…`);
         await new Promise(r => setTimeout(r, delay));
       } else {
         throw err;
