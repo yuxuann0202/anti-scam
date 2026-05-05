@@ -247,39 +247,6 @@ function ResultDisplay({ result, onBack, t, lang, onUpdateResult, user }) {
         </div>
       </div>
 
-      {/* ── Embedded Links (message type only) ── */}
-      {resultType === 'message' && result.embeddedLinks && result.embeddedLinks.length > 0 && (
-        <div className="rd-card rd-card--anim-2">
-          <div className="rd-card-header">
-            <div className="rd-card-icon">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-              </svg>
-            </div>
-            <h3 className="rd-card-title">{t('embeddedLinksTitle')}</h3>
-          </div>
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {result.embeddedLinks.map((link, i) => {
-              const riskColor = link.isWhitelisted ? '#2d7a5c' : link.riskLevel === 'High' ? '#d4426b' : link.riskLevel === 'Medium' ? '#e8a028' : '#2d7a5c';
-              const riskLabel = link.isWhitelisted ? t('embeddedLinkOfficial') : link.riskLevel === 'High' ? t('embeddedLinkHigh') : link.riskLevel === 'Medium' ? t('embeddedLinkMedium') : t('embeddedLinkSafe');
-              const displayUrl = link.url.length > 48 ? link.url.substring(0, 48) + '…' : link.url;
-              return (
-                <li key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', background: 'var(--bg-light)', borderRadius: '8px', border: '1.5px solid var(--border-color)', borderLeft: `3px solid ${riskColor}` }}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={riskColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                    {link.isScam && !link.isWhitelisted
-                      ? <><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></>
-                      : <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></>
-                    }
-                  </svg>
-                  <span style={{ flex: 1, fontSize: '12px', color: 'var(--text-muted)', fontFamily: 'monospace', wordBreak: 'break-all' }}>{displayUrl}</span>
-                  <span style={{ flexShrink: 0, fontSize: '11px', fontWeight: 700, color: riskColor, background: `${riskColor}14`, padding: '3px 9px', borderRadius: '4px' }}>{riskLabel}</span>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
 
       {/* ── What you should do ── */}
       {displayData.advice && displayData.advice.length > 0 && (

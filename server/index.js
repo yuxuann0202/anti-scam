@@ -289,100 +289,6 @@ const analyzePhoneNumbers = (message) => {
   return analysis;
 };
 
-// URL EXTRACTOR — pulls all http/https/www links from a message (max 3)
-const extractUrlsFromMessage = (message) => {
-  const urlRegex = /https?:\/\/[^\s<>"{}|\\^`[\]'"]+|www\.[^\s<>"{}|\\^`[\]'"]+/gi;
-  const matches = message.match(urlRegex) || [];
-  return [...new Set(matches)].slice(0, 3);
-};
-
-// QUICK URL SCANNER — rule-based only, no AI, used inside message scan
-const quickScanUrl = async (rawUrl) => {
-  let url = rawUrl.trim();
-  if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
-  try { new URL(url); } catch { return null; }
-
-  const whitelistCheck = checkOfficalWhitelist(url);
-  if (whitelistCheck.isWhitelisted) {
-    return { url: rawUrl, isWhitelisted: true, whitelistType: whitelistCheck.type, riskLevel: 'Low', isScam: false };
-  }
-
-  const [reputation, dbMatches] = await Promise.all([
-    checkDomainReputation(url),
-    Promise.resolve(checkAgainstDatabase(url))
-  ]);
-
-  const hostname = (() => { try { return new URL(url).hostname; } catch { return ''; } })();
-  const isSuspiciousTLD = /\.(tk|ml|ga|cf|gq|top|xyz|site|online|click|link|win|loan|work|trade|info|biz|buzz|icu|vip|shop|store|fun|space|live|world|today|best|club|pro)$/i.test(hostname);
-  const isShortened = /bit\.ly|tinyurl|short\.link|goo\.gl|ow\.ly|is\.gd|adf\.ly/i.test(url);
-
-  // Brand impersonation: domain contains a well-known brand name but is NOT the official domain
-  const brandImpersonation = (() => {
-    const brands = [
-      { name: /maybank/i, official: /maybank2u\.com\.my$|maybank\.com\.my$/ },
-      { name: /cimb/i, official: /cimb\.com\.my$|cimb\.co\.id$|cimbclicks\.com$/ },
-      { name: /publicbank|pbbank/i, official: /publicbank\.com\.my$/ },
-      { name: /hsbc/i, official: /hsbc\.com\.my$|hsbc\.com$/ },
-      { name: /rhb/i, official: /rhb\.com\.my$/ },
-      { name: /ambank/i, official: /ambank\.com\.my$/ },
-      { name: /myeg/i, official: /myeg\.com\.my$/ },
-      { name: /lhdn|hasil/i, official: /lhdn\.gov\.my$|hasil\.gov\.my$/ },
-      { name: /pdrm/i, official: /pdrm\.gov\.my$/ },
-      { name: /shopee/i, official: /shopee\.com\.my$|shopee\.com$/ },
-      { name: /lazada/i, official: /lazada\.com\.my$|lazada\.com$/ },
-      { name: /grab/i, official: /grab\.com$|grab\.com\.my$/ },
-      { name: /poslaju/i, official: /poslaju\.com\.my$/ },
-      { name: /pos(?:malaysia)?/i, official: /pos\.com\.my$|poslaju\.com\.my$/ },
-      { name: /jnt|jandt/i, official: /jnt\.com\.my$|jntexpress\.com$/ },
-      { name: /ninjavan/i, official: /ninjavan\.co$/ },
-      { name: /gdex/i, official: /gdex\.com\.my$/ },
-      { name: /citylink/i, official: /citylinkexpress\.com$/ },
-      { name: /affin/i, official: /affin\.com\.my$/ },
-      { name: /uob/i, official: /uob\.com\.my$/ },
-      { name: /bankislam/i, official: /bankislam\.com\.my$/ },
-      { name: /touchngo|tng/i, official: /touchngo\.com\.my$|tngdigital\.com\.my$/ },
-      { name: /celcom/i, official: /celcom\.com\.my$/ },
-      { name: /maxis/i, official: /maxis\.com\.my$/ },
-      { name: /digi/i, official: /digi\.com\.my$/ },
-      { name: /unifi/i, official: /unifi\.com\.my$/ },
-      { name: /telekom|tm(?:net)?/i, official: /tm\.com\.my$|tmnet\.com\.my$/ },
-      { name: /sspn|ptptn/i, official: /ptptn\.gov\.my$|sspn\.com\.my$/ },
-      { name: /kwsp|epf/i, official: /kwsp\.gov\.my$/ },
-      { name: /socso|perkeso/i, official: /perkeso\.gov\.my$/ },
-    ];
-    for (const brand of brands) {
-      if (brand.name.test(hostname) && !brand.official.test(hostname)) {
-        return true;
-      }
-    }
-    return false;
-  })();
-
-  let riskLevel = 'Low';
-  let isScam = false;
-
-  if (brandImpersonation || reputation.isBlacklisted || dbMatches.length > 0) {
-    // Definitive signals: impersonating a known brand, blacklisted, or matched scam pattern
-    riskLevel = 'High'; isScam = true;
-  } else if (isSuspiciousTLD || reputation.abuseScore > 30 || isShortened) {
-    // Uncertain signals: suspicious TLD alone could be a legit small business,
-    // so mark Medium and let the AI make the final call
-    riskLevel = 'Medium'; isScam = true;
-  }
-
-  return {
-    url: rawUrl,
-    isWhitelisted: false,
-    domain: reputation.domain,
-    riskLevel,
-    isScam,
-    isShortened,
-    isSuspiciousTLD,
-    brandImpersonation,
-    dbMatches: dbMatches.length,
-    abuseScore: reputation.abuseScore
-  };
-};
 
 //  BUILT-IN EMOTIONAL MANIPULATION ANALYSIS
 const analyzeEmotionalManipulation = (message) => {
@@ -694,21 +600,10 @@ app.post('/api/scan-message', async (req, res) => {
     const phoneAnalysis = analyzePhoneNumbers(message);
     console.log(`[Phone Check] Found ${phoneAnalysis.length} phone numbers`);
 
-    // Extract & quick-scan URLs embedded in the message
     const { aiModel } = req.body;
-    const embeddedUrls = extractUrlsFromMessage(message);
-    let embeddedLinkResults = [];
-    if (embeddedUrls.length > 0) {
-      console.log(`[URL Extraction] Found ${embeddedUrls.length} URL(s): ${embeddedUrls.join(', ')}`);
-      const rawResults = await Promise.all(embeddedUrls.map(u => quickScanUrl(u).catch(() => null)));
-      embeddedLinkResults = rawResults.filter(Boolean);
-    }
-    const hasRiskyLinks = embeddedLinkResults.some(l => l.isScam);
-    const linkContext = embeddedLinkResults.length > 0
-      ? embeddedLinkResults.map(l =>
-          `${l.url} → Risk: ${l.riskLevel}${l.isWhitelisted ? ' (Official)' : ''}${l.brandImpersonation ? ' (BRAND IMPERSONATION — fake domain mimicking official brand)' : ''}${l.dbMatches > 0 ? ' (Scam DB match)' : ''}${l.isShortened ? ' (Shortened URL)' : ''}${l.isSuspiciousTLD ? ' (Suspicious TLD)' : ''}`
-        ).join(' | ')
-      : 'None';
+    const embeddedLinkResults = [];
+    const hasRiskyLinks = false;
+    const linkContext = 'None';
 
     // Emotional Manipulation Analysis
     const emotionalAnalysis = analyzeEmotionalManipulation(message);
