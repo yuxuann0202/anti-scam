@@ -1,10 +1,14 @@
 import React, { useState } from 'react';
 import '../styles/InputForm.css';
 
+const URL_PATTERN = /https?:\/\/[^\s]+|www\.[^\s]+\.[^\s]+/i;
+
 function MessageInput({ onScan, t }) {
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const hasLink = URL_PATTERN.test(message);
 
   const handleScan = async () => {
     if (!message.trim()) {
@@ -13,6 +17,10 @@ function MessageInput({ onScan, t }) {
     }
     if (message.length < 5) {
       setError(t('errorMsgShort'));
+      return;
+    }
+    if (hasLink) {
+      setError(t('errorMsgHasLink'));
       return;
     }
 
@@ -63,14 +71,17 @@ function MessageInput({ onScan, t }) {
         </label>
         <textarea
           id="message-input"
-          className={`message-textarea ${error ? 'error' : ''}`}
+          className={`message-textarea ${error || hasLink ? 'error' : ''}`}
           value={message}
           onChange={(e) => { setMessage(e.target.value); setError(''); }}
           onKeyPress={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleScan(); } }}
           placeholder={t('placeholderMsg')}
           rows="8"
         />
-        {error && <div className="error-message">{error}</div>}
+        {hasLink
+          ? <div className="error-message">{t('errorMsgHasLink')}</div>
+          : error && <div className="error-message">{error}</div>
+        }
         <div className="character-count">{t('charCount', { count: message.length })}</div>
       </div>
 
@@ -82,7 +93,7 @@ function MessageInput({ onScan, t }) {
           </svg>
           {t('btnPaste')}
         </button>
-        <button className="btn-primary" onClick={handleScan} disabled={isLoading || !message.trim()}>
+        <button className="btn-primary" onClick={handleScan} disabled={isLoading || !message.trim() || hasLink}>
           {isLoading ? (
             <><span className="spinner"/>{t('analyzing')}</>
           ) : (
