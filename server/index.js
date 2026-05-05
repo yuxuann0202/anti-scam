@@ -606,7 +606,6 @@ app.post('/api/scan-message', async (req, res) => {
     const { aiModel } = req.body;
     const embeddedLinkResults = [];
     const hasRiskyLinks = false;
-    const linkContext = 'None';
 
     // Emotional Manipulation Analysis
     const emotionalAnalysis = analyzeEmotionalManipulation(message);
@@ -639,41 +638,11 @@ app.post('/api/scan-message', async (req, res) => {
     }
 
     // AI Analysis
-    const prompt = `You are a MALAYSIAN ANTI-FRAUD SPECIALIST. Analyze this message for potential scams.
-    
-LANG_PREFERENCE: ${lang} (Provide "explanation" and "advice" in this language. Specifically support English, Malay, Chinese, and Tamil).
-
-Focus on:
-- Financial scams targeting Malaysian banks (Maybank, CIMB, RHB).
-- Parcel scams (PostLaju, Shopee, Lazada).
-- Government agency impersonation (LHDN, PDRM, MySejahtera).
-- Emotional manipulation (Urgency, Threats, "You won a prize").
-- Messages in English, Malay, Chinese (Simplified/Traditional), or Tamil.
-
-DATABASE CONTEXT:
-Patterns found: ${dbMatches.length > 0 ? dbMatches.map(m => m.type).join(', ') : 'None'}
-Phone check: ${phoneAnalysis.length} numbers detected.
-Emotional triggers: ${Object.keys(emotionalAnalysis.triggers).join(', ') || 'None'}
-Embedded links in message: ${linkContext}${hasRiskyLinks ? ' ⚠️ RISKY LINKS DETECTED — treat as strong scam signal' : ''}
-
+    const prompt = `Malaysian anti-scam AI. Analyze this message. Reply in ${lang} only.
+Signals: patterns=${dbMatches.map(m=>m.type).join(',')||'none'}, phones=${phoneAnalysis.length}, emotional=${Object.keys(emotionalAnalysis.triggers).join(',')||'none'}
 MESSAGE: "${message}"
-
-RULES FOR 99.9% ACCURACY:
-1. VERDICT: "isScam" should be TRUE if there is ANY suspicious link combined with a call to action.
-2. VERDICT: "isScam" should be FALSE if the message is clearly personal or official WITHOUT malicious links.
-3. ADVICE: Provide specific Malaysian safety steps (e.g., "Check via CCID Portal").
-
-JSON ONLY:
-{
-  "isScam": boolean,
-  "confidence": number (1-99, reflect genuine certainty — use low values like 40-65 when evidence is weak or mixed),
-  "riskLevel": "Low" | "Medium" | "High",
-  "scamType": "Type of Scam",
-  "explanation": "${explanationRule} MANDATORY: WRITE ENTIRELY IN ${lang.toUpperCase()}.",
-  "advice": ["Action 1 IN ${lang.toUpperCase()}", "Action 2 IN ${lang.toUpperCase()}", "Action 3 IN ${lang.toUpperCase()}"]
-}
-
-CRITICAL: If language is 'ms', output Malay. If 'zh', output Chinese. If 'ta', output Tamil. If 'en', output English. YOU MUST COMPLY.`;
+Respond JSON only:
+{"isScam":bool,"confidence":1-99,"riskLevel":"Low"|"Medium"|"High","scamType":"string","explanation":"${explanationRule} IN ${lang.toUpperCase()}","advice":["step1","step2","step3"]}}`;
 
 
     
