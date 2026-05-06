@@ -59,8 +59,16 @@ async function geminiGenerateWithRetry(promptOrParts, maxAttempts = 3) {
   }
 }
 
-// Initialize OpenAI GPT-4o mini (used for image + link scanning)
+
+// OpenAI GPT-4o mini (link + image scanning)
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+// Helper: strip markdown and extract JSON from AI response
+const parseOpenAIJson = (text) => {
+  const match = text.replace(/```json\n?/g, '').replace(/```/g, '').trim().match(/\{[\s\S]*\}/);
+  if (match) return JSON.parse(match[0]);
+  throw new Error('Could not parse AI response');
+};
 
 const serverTranslations = {
   en: {
@@ -140,12 +148,6 @@ const logAnalysis = (type, content, result) => {
   console.log(`Risk Level: ${result.riskLevel} | Confidence: ${result.confidence}%`);
 };
 
-// Shared helper: strip markdown fences and extract first JSON object from AI response
-const parseOpenAIJson = (text) => {
-  const match = text.replace(/```json\n?/g, '').replace(/```/g, '').trim().match(/\{[\s\S]*\}/);
-  if (match) return JSON.parse(match[0]);
-  throw new Error('Could not parse AI response');
-};
 
 //  OFFICIAL WHITELIST CHECK 
 const checkOfficalWhitelist = (content) => {
@@ -519,40 +521,7 @@ CRITICAL: If language is 'ms', output Malay. If 'zh', output Chinese. If 'ta', o
   }
 };
 
-// Image analysis via OpenAI GPT-4o mini
-// detail:low = 85 tokens flat; max_tokens capped per mode; compressed prompt
-const analyzeImageWithOpenAI = async (imageBase64, mimeType = 'image/jpeg', lang = 'en', aiModel = 'auto') => {
-  try {
-    const maxTokens = aiModel === 'deep' ? 500 : aiModel === 'fast' ? 300 : 350;
-    const explanationRule = aiModel === 'deep'
-      ? 'Detailed reasoning, key points only, one paragraph.'
-      : 'Max 1-2 short sentences.';
 
-    const prompt = `Malaysian anti-fraud specialist. Detect scam/fraud in this image.
-Lang: ${lang}. Write explanation+advice entirely in ${lang.toUpperCase()}.
-Detect: fake bank UIs, phishing SMS, OTP/PIN demands, suspicious URLs, fake receipts, LHDN/Maybank/Shopee impersonation.
-SCAM if: mimics bank with errors, requests credentials, shows "Account Blocked" + external link.
-SAFE if: clear official receipt, legitimate app screenshot.
-JSON ONLY: {"isScam":bool,"confidence":(1-99, low=40-65 if unsure),"riskLevel":"Low|Medium|High","scamType":"string","explanation":"${explanationRule}","advice":["...","...","..."],"extractedText":"..."}`;
-
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      max_tokens: maxTokens,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'text', text: prompt },
-          { type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}`, detail: 'low' } }
-        ]
-      }]
-    });
-
-    return parseOpenAIJson(response.choices[0].message.content);
-  } catch (error) {
-    console.error('[OpenAI Vision] Error:', error.message);
-    return null;
-  }
-};
 
 //  MESSAGE SCANNING 
 app.post('/api/scan-message', async (req, res) => {
@@ -652,20 +621,32 @@ Respond JSON only:
       console.log(`[Routing] Using Gemini (Mode: ${effectiveMode})`);
       const result = await geminiGenerateWithRetry(prompt);
       responseText = result.response.text();
-      
-      // Clean up potential markdown formatting from AI response
       responseText = responseText.replace(/```json\n/g, '').replace(/```\n/g, '').replace(/```/g, '').trim();
       const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-
       if (!jsonMatch) {
         console.error('AI Response Error. Raw output:', responseText);
-        return res.status(500).json({ error: 'Invalid response from AI model' });
+        throw new Error('Invalid AI response format');
       }
-
       aiResult = JSON.parse(jsonMatch[0]);
     } catch (e) {
-      console.error('AI Execution Error:', e.message);
-      return res.status(500).json({ error: 'Failed to execute or parse AI request' });
+      console.warn('AI unavailable, using rule-based fallback:', e.message);
+      const isScam = dbMatches.length > 0 || ruleScore.score >= 40 || emotionalAnalysis.isHighRisk;
+      const confidence = isScam ? Math.min(50 + ruleScore.score, 85) : 75;
+      aiResult = {
+        isScam,
+        confidence,
+        riskLevel: ruleScore.score >= 60 ? 'High' : ruleScore.score >= 30 ? 'Medium' : 'Low',
+        scamType: dbMatches.length > 0 ? dbMatches[0].type : (isScam ? 'Suspicious Content' : 'No Scam Detected'),
+        explanation: isScam
+          ? 'This message contains suspicious patterns. AI analysis temporarily unavailable — result based on pattern matching.'
+          : 'No obvious scam patterns detected. AI analysis temporarily unavailable.',
+        advice: [
+          getTranslation(lang, 'noClick'),
+          getTranslation(lang, 'reportScam'),
+          getTranslation(lang, 'verifyIndependently'),
+        ],
+        aiUnavailable: true,
+      };
     }
 
     // Combine all scores with SMART logic
@@ -955,10 +936,24 @@ app.post('/api/scan-image', async (req, res) => {
     const mimeType = header.split(':')[1]?.split(';')[0] || 'image/jpeg';
 
     let aiResult = null;
-    aiResult = await analyzeImageWithOpenAI(base64Data, mimeType, lang, aiModel);
-
-    if (!aiResult) {
-      console.log('[Image Routing] OpenAI failed — falling back to Gemini Vision');
+    try {
+      const maxTokens = aiModel === 'deep' ? 500 : 350;
+      const explanationRule = aiModel === 'deep' ? 'Detailed reasoning, key points only, one paragraph.' : 'Max 1-2 short sentences.';
+      const imgPrompt = `Malaysian anti-fraud specialist. Detect scam/fraud in this image.
+Lang: ${lang}. Write explanation+advice entirely in ${lang.toUpperCase()}.
+Detect: fake bank UIs, phishing SMS, OTP/PIN demands, suspicious URLs, fake receipts, LHDN/Maybank/Shopee impersonation.
+JSON ONLY: {"isScam":bool,"confidence":(1-99),"riskLevel":"Low|Medium|High","scamType":"string","explanation":"${explanationRule}","advice":["...","...","..."],"extractedText":"..."}`;
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        max_tokens: maxTokens,
+        messages: [{ role: 'user', content: [
+          { type: 'text', text: imgPrompt },
+          { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64Data}`, detail: 'low' } }
+        ]}]
+      });
+      aiResult = parseOpenAIJson(response.choices[0].message.content);
+    } catch (e) {
+      console.log('[Image Routing] OpenAI failed — falling back to Gemini Vision:', e.message);
       aiResult = await analyzeImageWithGemini(image, lang, aiModel);
     }
 

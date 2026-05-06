@@ -44,6 +44,11 @@ const scamDatabase = {
     // Official Government
     { pattern: /(?:^|\/)(?:www\.)?lhdn\.gov\.my(?:\/|$)|(?:^|\/)(?:www\.)?pdrm\.gov\.my(?:\/|$)|(?:^|\/)(?:www\.)?bnm\.gov\.my(?:\/|$)|(?:^|\/)(?:www\.)?bnm\.my(?:\/|$)/, type: 'Government Official', risk: 'Low' },
     
+    // Bank TAC / OTP messages — always legitimate, never share but not a scam
+    { pattern: /(?:maybank|cimb|rhb|public\s*bank|hong\s*leong|ambank|affin|bsn|bank\s*islam|hsbc|uob|alliance).*(?:TAC|OTP|pin).*(?:do not share|jangan kongsi|valid for|sah selama)/i, type: 'Bank OTP/TAC', risk: 'Low' },
+    { pattern: /(?:TAC|OTP)\s*(?:no\.?|number|kod)\s*(?:is|ialah|adalah)?\s*\d{4,8}/i, type: 'Bank OTP/TAC', risk: 'Low' },
+    { pattern: /RM0\.00\s+(?:Maybank|CIMB|RHB|Public Bank|Hong Leong|AmBank)/i, type: 'Bank OTP/TAC', risk: 'Low' },
+
     // Personal/Natural Messages
     { pattern: /^(hi|hello|hey|good morning|how are you|see you|meeting|appointment|order|shipped|delivery|appointment confirmed)/i, type: 'Personal Message', risk: 'Low' },
     { pattern: /^maybank2u\s*\|\s*maybank\s*malaysia$/i, type: 'Brand Information', risk: 'Low' },
