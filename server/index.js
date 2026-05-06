@@ -57,8 +57,8 @@ async function geminiGenerateWithRetry(promptOrParts, maxAttempts = 1) {
 }
 
 
-// OpenAI GPT-4o mini (link + image scanning)
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// OpenAI GPT-4o mini (link + image scanning) — only initialize if key is present
+const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
 
 // Helper: strip markdown and extract JSON from AI response
 const parseOpenAIJson = (text) => {
@@ -623,6 +623,7 @@ Respond JSON only:
     } catch (e) {
       console.warn('[Message] Gemini failed, trying OpenAI fallback:', e.message);
       try {
+        if (!openai) throw new Error('OpenAI not configured');
         const openaiResponse = await openai.chat.completions.create({
           model: 'gpt-4o-mini',
           max_tokens: 350,
@@ -864,6 +865,7 @@ CRITICAL: If language is 'ms', output Malay. If 'zh', output Chinese. If 'ta', o
       const maxTokens = (aiModel === 'deep' || effectiveMode === 'auto→deep') ? 500 : 350;
       console.log(`[Link Routing] Using OpenAI GPT-4o mini (Mode: ${effectiveMode})`);
       try {
+        if (!openai) throw new Error('OpenAI not configured');
         const openaiResponse = await openai.chat.completions.create({
           model: 'gpt-4o-mini',
           max_tokens: maxTokens,
@@ -960,6 +962,7 @@ app.post('/api/scan-image', async (req, res) => {
 Lang: ${lang}. Write explanation+advice entirely in ${lang.toUpperCase()}.
 Detect: fake bank UIs, phishing SMS, OTP/PIN demands, suspicious URLs, fake receipts, LHDN/Maybank/Shopee impersonation.
 JSON ONLY: {"isScam":bool,"confidence":(1-99),"riskLevel":"Low|Medium|High","scamType":"string","explanation":"${explanationRule}","advice":["...","...","..."],"extractedText":"..."}`;
+      if (!openai) throw new Error('OpenAI not configured');
       const response = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         max_tokens: maxTokens,
