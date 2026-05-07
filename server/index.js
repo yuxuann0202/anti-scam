@@ -1020,6 +1020,30 @@ JSON ONLY: {"isScam":bool,"confidence":(1-99),"riskLevel":"Low|Medium|High","sca
         aiResult.explanation = `Legitimate content from ${whitelistCheck.type}. verified safe.`;
       }
 
+      // Receipt detection — inject verification advisory regardless of AI verdict
+      const receiptKeywords = /\b(reference\s*(?:id|no|number)|ref(?:erence)?\s*[:：]|beneficiary|transaction\s*(?:id|ref)|receipt|scan\s*&?\s*pay|duitnow|ibg|rentas|fpx|successful|amount\s*(?:rm|myr)|rm\s*\d|transfer(?:red)?)\b/i;
+      const isReceiptImage = receiptKeywords.test(aiResult.extractedText || '') || receiptKeywords.test(aiResult.explanation || '');
+
+      if (isReceiptImage) {
+        const receiptAdvice = {
+          en: 'Always verify received payments in YOUR OWN bank app transaction history — never trust a receipt sent by the other party. Screenshots can be faked or reused.',
+          ms: 'Sentiasa sahkan pembayaran yang diterima dalam sejarah transaksi apl bank ANDA SENDIRI — jangan percaya resit yang dihantar pihak lain. Tangkapan skrin boleh dipalsukan.',
+          zh: '请务必在您自己的银行应用程序交易记录中核实收款——切勿相信对方发来的收据截图，截图可以伪造或重复使用。',
+          ta: 'உங்கள் சொந்த வங்கி பயன்பாட்டில் பரிவர்த்தனை வரலாற்றில் பணம் வந்துள்ளதை சரிபார்க்கவும் — எதிர் தரப்பினர் அனுப்பும் ரசீதை நம்பாதீர்கள். திரைப்படங்கள் போலியாக இருக்கலாம்.',
+        };
+        const advisoryText = receiptAdvice[lang] || receiptAdvice.en;
+        // Inject as first advice item if not already present
+        if (!aiResult.advice) aiResult.advice = [];
+        if (!aiResult.advice.some(a => a.includes('own bank') || a.includes('bank app') || a.includes('apl bank') || a.includes('银行应用') || a.includes('வங்கி'))) {
+          aiResult.advice.unshift(advisoryText);
+        }
+        // Cap confidence — screenshot alone cannot confirm payment completed
+        if (!aiResult.isScam) {
+          aiResult.confidence = Math.min(aiResult.confidence, 75);
+          aiResult.isReceiptImage = true;
+        }
+      }
+
       aiResult.ocr_success = true;
       logAnalysis('image', (aiResult.extractedText || '').substring(0, 50), aiResult);
 
