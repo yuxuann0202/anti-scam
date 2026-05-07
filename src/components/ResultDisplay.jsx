@@ -3,10 +3,8 @@ import '../styles/Result.css';
 
 const RING_C = 339.29; // 2 * π * 54
 
-function ResultDisplay({ result, onBack, t, lang, onUpdateResult, user }) {
+function ResultDisplay({ result, onBack, t, lang, onUpdateResult }) {
   const [isTranslating, setIsTranslating] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState('');
   const [isRescanning, setIsRescanning] = useState(false);
 
   const { isScam, riskLevel, confidence = 0, whitelistMatch, type: resultType } = result;
@@ -59,10 +57,12 @@ function ResultDisplay({ result, onBack, t, lang, onUpdateResult, user }) {
     advice: result.advice || [],
     scamType: result.scamType || ''
   });
+  const translationCacheRef = useRef({});
 
   // Reset when a new scan result arrives
   useEffect(() => {
     scanLangRef.current = lang;
+    translationCacheRef.current = {};
     const newData = {
       explanation: result.explanation,
       advice: result.advice || [],
@@ -82,6 +82,11 @@ function ResultDisplay({ result, onBack, t, lang, onUpdateResult, user }) {
       return;
     }
 
+    if (translationCacheRef.current[lang]) {
+      setDisplayData(translationCacheRef.current[lang]);
+      return;
+    }
+
     const translateResult = async () => {
       setIsTranslating(true);
       try {
@@ -98,11 +103,13 @@ function ResultDisplay({ result, onBack, t, lang, onUpdateResult, user }) {
         });
         const data = await response.json();
         if (data.success) {
-          setDisplayData({
+          const translated = {
             explanation: data.data.explanation,
             advice: data.data.advice || originalDataRef.current.advice,
             scamType: data.data.scamType || originalDataRef.current.scamType
-          });
+          };
+          translationCacheRef.current[lang] = translated;
+          setDisplayData(translated);
         }
       } catch (error) {
         console.error('Translation error:', error);
@@ -113,34 +120,6 @@ function ResultDisplay({ result, onBack, t, lang, onUpdateResult, user }) {
     translateResult();
   }, [lang, result.whitelistMatch, result.explanation]);
 
-  const handleSaveReport = async () => {
-    setIsSaving(true);
-    setSaveMessage('');
-    try {
-      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-      const response = await fetch(`${API_URL}/api/save-report`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: result.content || result.extractedText || 'Unknown Content',
-          isScam: result.isScam,
-          riskLevel: result.riskLevel,
-          scamType: result.scamType,
-          explanation: result.explanation,
-          advice: result.advice,
-          confidence: result.confidence,
-          type: result.type || 'message',
-          userId: user?.uid || null
-        })
-      });
-      const data = await response.json();
-      setSaveMessage(data.success ? t('successSave') : (data.details || t('failSave')));
-    } catch (error) {
-      setSaveMessage(t('connError'));
-    } finally {
-      setIsSaving(false);
-    }
-  };
 
   const typeLabel = resultType === 'image' ? 'Image' : resultType === 'link' ? 'Link' : 'Message';
 
@@ -366,31 +345,6 @@ function ResultDisplay({ result, onBack, t, lang, onUpdateResult, user }) {
         </div>
       )}
 
-      {/* ── Save Report ── */}
-      <div className="rd-cta rd-card--anim-5">
-        <div className="rd-cta-body">
-          <h4>{t('helpProtectOthers')}</h4>
-          <p>{t('helpProtectDesc')}</p>
-          {saveMessage && <p className="rd-save-msg">{saveMessage}</p>}
-        </div>
-        <button
-          className="rd-btn rd-btn--primary"
-          onClick={handleSaveReport}
-          disabled={isSaving || isTranslating}
-        >
-          {isSaving ? (
-            <><span className="rd-spinner"/>{t('analyzing')}</>
-          ) : (
-            <>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                <polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
-              </svg>
-              {t('btnSaveReport')}
-            </>
-          )}
-        </button>
-      </div>
 
       {/* ── Footer ── */}
       <div className="rd-footer">
