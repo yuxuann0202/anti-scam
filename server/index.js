@@ -537,28 +537,10 @@ app.post('/api/scan-message', async (req, res) => {
       return res.status(400).json({ error: 'Message is too short to analyze' });
     }
 
-    // CHECK OFFICIAL WHITELIST FIRST ★
+    // Whitelist check — collect as signal only, AI still makes final decision
     const whitelistCheck = checkOfficalWhitelist(message);
     if (whitelistCheck.isWhitelisted) {
-      console.log(`[Whitelist Match] ${whitelistCheck.type}`);
-      return res.json({
-        success: true,
-        data: {
-          isScam: false,
-          confidence: 95,
-          riskLevel: 'Low',
-          scamType: 'Legitimate',
-          explanation: getTranslation(lang, 'legitimate', { type: whitelistCheck.type }),
-          advice: [
-            getTranslation(lang, 'verified'),
-            getTranslation(lang, 'proceed'),
-            getTranslation(lang, 'officialChannels')
-          ],
-          whitelistMatch: whitelistCheck.type,
-          database_matches: 0
-        },
-        timestamp: new Date().toISOString()
-      });
+      console.log(`[Whitelist Signal] ${whitelistCheck.type} — passing to AI for final decision`);
     }
 
     //  Check against database
@@ -621,6 +603,7 @@ app.post('/api/scan-message', async (req, res) => {
     // AI Analysis
     const prompt = `Malaysian anti-scam AI. Analyze this message. Reply in ${lang} only.
 Signals:
+- Whitelist match: ${whitelistCheck.isWhitelisted ? whitelistCheck.type + ' (looks official but verify context)' : 'none'}
 - Scam patterns matched: ${dbMatches.map(m=>m.type).join(',')||'none'}
 - Phone numbers found: ${phoneAnalysis.length} ${phoneAnalysis.length > 0 ? '(suspicious if unsolicited)' : ''}
 - Embedded links: ${hasLinks ? detectedUrls.join(', ') + ' ⚠️ TREAT AS HIGH RISK if combined with urgency/request' : 'none'}
@@ -628,7 +611,7 @@ Signals:
 - Emotional triggers: ${Object.keys(emotionalAnalysis.triggers).join(',')||'none'}
 - Rule score: ${ruleScore.score}/100
 MESSAGE: "${message}"
-RULES: isScam=true if message contains link+urgency, asks to share OTP, impersonates bank/govt, or has suspicious phone. isScam=false if clearly personal or official OTP you requested yourself.
+RULES: isScam=true if message contains link+urgency, asks to share OTP, impersonates bank/govt, or has suspicious phone. isScam=false if clearly personal or official OTP you requested yourself. Whitelist match alone does NOT mean safe — scammers impersonate official brands.
 Respond JSON only:
 {"isScam":bool,"confidence":1-99,"riskLevel":"Low"|"Medium"|"High","scamType":"string","explanation":"${explanationRule} IN ${lang.toUpperCase()}","advice":["step1","step2","step3"]}`;
 
