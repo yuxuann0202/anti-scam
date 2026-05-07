@@ -329,14 +329,10 @@ const analyzeEmotionalManipulation = (message) => {
   };
 };
 
-// Deep scan post-processor — forces decisive result (no weak Medium)
+// Deep scan post-processor — boost confidence, keep riskLevel as AI decided
 const enforceDeepScanDecision = (aiResult) => {
   if (!aiResult) return aiResult;
-  if (aiResult.riskLevel === 'Medium') {
-    // Push Medium toward High or Low based on isScam verdict
-    aiResult.riskLevel = aiResult.isScam ? 'High' : 'Low';
-  }
-  // Boost confidence — deep scan should be more certain
+  // Boost confidence — deep scan should be more certain than normal scan
   if (aiResult.isScam) {
     aiResult.confidence = Math.max(aiResult.confidence, 80);
   } else {
