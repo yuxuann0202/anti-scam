@@ -600,8 +600,32 @@ app.post('/api/scan-message', async (req, res) => {
       }
     }
 
-    // AI Analysis
-    const prompt = `Malaysian anti-scam AI. Analyze this message. Reply in ${lang} only.
+    // AI Analysis — deep mode uses a stricter, more thorough prompt
+    const prompt = aiModel === 'deep'
+      ? `You are a SENIOR Malaysian anti-scam forensic analyst. Perform a DEEP ANALYSIS of this message. Reply entirely in ${lang}.
+
+COLLECTED EVIDENCE:
+- Whitelist match: ${whitelistCheck.isWhitelisted ? whitelistCheck.type + ' (NOTE: scammers impersonate official brands — do not trust name alone)' : 'none'}
+- Scam patterns matched: ${dbMatches.map(m=>m.type).join(', ')||'none'}
+- Phone numbers found: ${phoneAnalysis.length} ${phoneAnalysis.length > 0 ? '— suspicious if user did not request contact' : ''}
+- Embedded links detected: ${hasLinks ? detectedUrls.join(', ') : 'none'}
+- OTP/TAC present: ${hasOtp ? 'YES — legitimate banks NEVER ask you to share OTP' : 'no'}
+- Emotional manipulation triggers: ${Object.keys(emotionalAnalysis.triggers).join(', ')||'none'}
+- Rule-based risk score: ${ruleScore.score}/100
+
+MESSAGE TO ANALYZE: "${message}"
+
+DEEP ANALYSIS INSTRUCTIONS:
+1. Examine EACH signal above individually — explain if it is suspicious or benign
+2. Consider the COMBINATION of signals — multiple weak signals together = high risk
+3. Check for impersonation — does sender claim to be a bank, government, or official brand?
+4. Check for urgency + action — does message pressure user to click, pay, or share?
+5. Re-evaluate confidence strictly — do not be lenient
+6. Provide 4-5 specific actionable advice steps
+
+Respond JSON only:
+{"isScam":bool,"confidence":1-99,"riskLevel":"Low"|"Medium"|"High","scamType":"string","explanation":"Thorough multi-point analysis covering each signal found, why it is or is not suspicious, and overall verdict. Write as one detailed paragraph in ${lang.toUpperCase()}. NO line breaks inside string.","advice":["step1","step2","step3","step4","step5"]}`
+      : `Malaysian anti-scam AI. Analyze this message. Reply in ${lang} only.
 Signals:
 - Whitelist match: ${whitelistCheck.isWhitelisted ? whitelistCheck.type + ' (looks official but verify context)' : 'none'}
 - Scam patterns matched: ${dbMatches.map(m=>m.type).join(',')||'none'}
@@ -827,9 +851,37 @@ app.post('/api/scan-link', async (req, res) => {
       }
     }
 
-    // AI Link Analysis
-    const prompt = `You are a MALAYSIAN ANTI-FRAUD SPECIALIST. Analyze this URL for potential phishing or scams.
-    
+    // AI Link Analysis — deep mode uses stricter forensic prompt
+    const prompt = aiModel === 'deep'
+      ? `You are a SENIOR Malaysian cybersecurity forensic analyst. Perform DEEP ANALYSIS on this URL. Reply entirely in ${lang}.
+
+FORENSIC EVIDENCE:
+- URL: "${url}"
+- Domain reputation score: ${JSON.stringify(reputation)}
+- Scam database matches: ${dbMatches.length > 0 ? dbMatches.map(m=>m.type).join(', ') : 'none'}
+- Page content preview: ${pageContent || 'Could not fetch — site may be down or blocking bots'}
+
+DEEP ANALYSIS INSTRUCTIONS:
+1. Examine the domain structure — look-alike spelling, suspicious TLD (.tk .ml .ga .cf), random subdomains
+2. Analyze reputation score — abuse reports, blacklist status
+3. Examine page content — fake login forms, OTP requests, urgency language, brand impersonation
+4. Cross-check domain vs page content — does domain match what the page claims to be?
+5. Consider all signals TOGETHER for final verdict
+6. Re-evaluate confidence strictly — be precise, not lenient
+7. Provide 4-5 specific protective actions
+
+JSON ONLY:
+{
+  "isScam": boolean,
+  "confidence": number (1-99),
+  "riskLevel": "Low"|"Medium"|"High",
+  "scamType": "string",
+  "explanation": "Detailed forensic breakdown covering domain analysis, reputation findings, page content review, and final verdict. One paragraph, no line breaks, entirely in ${lang.toUpperCase()}.",
+  "advice": ["step1","step2","step3","step4","step5"]
+}
+CRITICAL: Write explanation and advice entirely in ${lang.toUpperCase()}.`
+      : `You are a MALAYSIAN ANTI-FRAUD SPECIALIST. Analyze this URL for potential phishing or scams.
+
 LANG_PREFERENCE: ${lang} (Provide "explanation" and "advice" in this language. Specifically support English, Malay, Chinese, and Tamil).
 
 URL: "${url}"
@@ -966,9 +1018,27 @@ app.post('/api/scan-image', async (req, res) => {
 
     let aiResult = null;
     try {
-      const maxTokens = aiModel === 'deep' ? 500 : 350;
-      const explanationRule = aiModel === 'deep' ? 'Detailed reasoning, key points only, one paragraph.' : 'Max 1-2 short sentences.';
-      const imgPrompt = `Malaysian anti-fraud specialist. Detect scam/fraud in this image.
+      const maxTokens = aiModel === 'deep' ? 700 : 350;
+      const imgPrompt = aiModel === 'deep'
+        ? `You are a SENIOR Malaysian cybersecurity forensic analyst. Perform DEEP VISUAL ANALYSIS on this image. Reply entirely in ${lang}.
+
+DEEP ANALYSIS INSTRUCTIONS:
+1. Read ALL text visible in the image carefully
+2. Examine visual design — logos, layout, fonts, colours — do they match the real brand?
+3. Check for red flags: OTP/PIN requests, suspicious URLs, urgency language, payment demands
+4. For receipts — verify reference number format (real IBG/DuitNow: 8-18 alphanumeric chars; fake: too short, repeated digits, missing)
+5. Check sender identity — impersonation of bank, government, courier, e-commerce?
+6. Consider ALL visual and text signals together for final verdict
+7. Provide 4-5 specific protective actions
+
+BANK RECEIPT KNOWLEDGE:
+- Real Malaysian IBG/DuitNow/FPX: alphanumeric 8-18 characters
+- Real UPI/Instant: 12-digit RRN
+- FAKE: reference under 8 digits, repeated digits (111111), no reference at all
+- Logo alone does NOT prove real — scammers copy logos
+
+JSON ONLY: {"isScam":bool,"confidence":(1-99),"riskLevel":"Low|Medium|High","scamType":"string","explanation":"Detailed forensic breakdown of visual elements, text content, suspicious indicators found, and final verdict. One paragraph, no line breaks, entirely in ${lang.toUpperCase()}.","advice":["step1","step2","step3","step4","step5"],"extractedText":"all text read from image"}`
+        : `Malaysian anti-fraud specialist. Detect scam/fraud in this image.
 Lang: ${lang}. Write explanation+advice entirely in ${lang.toUpperCase()}.
 Detect: fake bank UIs, phishing SMS, OTP/PIN demands, suspicious URLs, fake receipts, LHDN/Maybank/Shopee impersonation.
 
@@ -979,7 +1049,7 @@ BANK RECEIPT REFERENCE NUMBER KNOWLEDGE (critical — do NOT trust logo alone):
 - FAKE receipt red flags: reference under 8 digits, all-repeated digits (111111, 000000), no reference number at all, or reference that looks randomly typed
 - A Maybank/CIMB/RHB logo on the receipt does NOT prove it is real — scammers copy logos. Verify the reference number format.
 
-JSON ONLY: {"isScam":bool,"confidence":(1-99),"riskLevel":"Low|Medium|High","scamType":"string","explanation":"${explanationRule}","advice":["...","...","..."],"extractedText":"..."}`;
+JSON ONLY: {"isScam":bool,"confidence":(1-99),"riskLevel":"Low|Medium|High","scamType":"string","explanation":"Max 1-2 short sentences.","advice":["...","...","..."],"extractedText":"..."}`;
       if (!openai) throw new Error('OpenAI not configured');
       const response = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
