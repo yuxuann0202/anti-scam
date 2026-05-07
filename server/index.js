@@ -33,8 +33,8 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Initialize Gemini (used for message scanning + translation)
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY, { apiVersion: 'v1beta' });
+const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-preview-05-20' });
 
 // Retry wrapper — tries 2.5 flash first, falls back to 2.0 flash on 503/500
 async function geminiGenerateWithRetry(promptOrParts, maxAttempts = 1) {
