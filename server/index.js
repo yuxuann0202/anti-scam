@@ -473,14 +473,23 @@ COMMON MALAYSIAN SCAM VISUALS TO DETECT:
 - Suspicious URL bars in the screenshot.
 - Demands for OTP, PIN, or immediate money transfer.
 
+BANK RECEIPT REFERENCE NUMBER KNOWLEDGE (use to verify legitimacy):
+- UPI/Instant transfers: 12-digit Retrieval Reference Number (RRN)
+- SWIFT international wire: 16-20 digits
+- Malaysian IBG/RENTAS: alphanumeric 8-18 characters
+- General bank receipts: 8-18 characters, alphanumeric
+- FAKE receipts often have: too short reference (under 8 digits), repeated digits (111111), or no reference number at all
+
 ANALYSIS RULES FOR 99.5% ACCURACY:
 1. SCAM (isScam: true) if:
    - It mimics a bank but has slight visual errors.
    - It asks for sensitive credentials (OTP/Password) in a suspicious context.
    - It mentions "Account Blocked" or "Suspicious Login" with an external link.
+   - Receipt has missing, too short, or suspicious reference numbers.
+   - Receipt amounts/dates look tampered or inconsistent.
 2. SAFE (isScam: false) if:
-   - It is a clear, official transaction receipt or official portal without suspicious redirects.
-   - Generic screenshots of legitimate apps.
+   - It is a clear, official transaction receipt with valid reference number format.
+   - Generic screenshots of legitimate apps without suspicious requests.
 
 RESPONSE FORMAT (JSON ONLY):
 {
@@ -568,6 +577,17 @@ app.post('/api/scan-message', async (req, res) => {
     const embeddedLinkResults = [];
     const hasRiskyLinks = false;
 
+    // Detect embedded links in message (signal only, not scanned)
+    const urlPattern = /https?:\/\/[^\s]+|www\.[^\s]+\.[^\s]+/gi;
+    const detectedUrls = message.match(urlPattern) || [];
+    const hasLinks = detectedUrls.length > 0;
+    console.log(`[Link Signal] Found ${detectedUrls.length} links in message`);
+
+    // Detect OTP patterns
+    const otpPattern = /\b(?:TAC|OTP|pin|kod|code)\b.*?\b\d{4,8}\b|\b\d{4,8}\b.*?\b(?:TAC|OTP|pin|kod|code)\b/i;
+    const hasOtp = otpPattern.test(message);
+    console.log(`[OTP Check] OTP detected: ${hasOtp}`);
+
     // Emotional Manipulation Analysis
     const emotionalAnalysis = analyzeEmotionalManipulation(message);
     console.log(`[Emotion Check] Emotional Risk Score: ${emotionalAnalysis.emotionalScore}`);
@@ -576,7 +596,7 @@ app.post('/api/scan-message', async (req, res) => {
 
     // Auto Mode: smartly selects explanation depth based on content complexity
     const isLongText = message.length > 250;
-    const isComplexContent = dbMatches.length > 0 || phoneAnalysis.length > 1 || ruleScore.score > 30;
+    const isComplexContent = dbMatches.length > 0 || phoneAnalysis.length > 1 || ruleScore.score > 30 || hasLinks;
     const hasEmotionalRisk = emotionalAnalysis.isHighRisk;
     const needsDeepAnalysis = isLongText || isComplexContent || hasEmotionalRisk;
 
@@ -600,8 +620,15 @@ app.post('/api/scan-message', async (req, res) => {
 
     // AI Analysis
     const prompt = `Malaysian anti-scam AI. Analyze this message. Reply in ${lang} only.
-Signals: patterns=${dbMatches.map(m=>m.type).join(',')||'none'}, phones=${phoneAnalysis.length}, emotional=${Object.keys(emotionalAnalysis.triggers).join(',')||'none'}
+Signals:
+- Scam patterns matched: ${dbMatches.map(m=>m.type).join(',')||'none'}
+- Phone numbers found: ${phoneAnalysis.length} ${phoneAnalysis.length > 0 ? '(suspicious if unsolicited)' : ''}
+- Embedded links: ${hasLinks ? detectedUrls.join(', ') + ' ⚠️ TREAT AS HIGH RISK if combined with urgency/request' : 'none'}
+- OTP/TAC code present: ${hasOtp ? '⚠️ WARNING — legitimate senders never ask you to share OTP' : 'no'}
+- Emotional triggers: ${Object.keys(emotionalAnalysis.triggers).join(',')||'none'}
+- Rule score: ${ruleScore.score}/100
 MESSAGE: "${message}"
+RULES: isScam=true if message contains link+urgency, asks to share OTP, impersonates bank/govt, or has suspicious phone. isScam=false if clearly personal or official OTP you requested yourself.
 Respond JSON only:
 {"isScam":bool,"confidence":1-99,"riskLevel":"Low"|"Medium"|"High","scamType":"string","explanation":"${explanationRule} IN ${lang.toUpperCase()}","advice":["step1","step2","step3"]}`;
 
@@ -961,6 +988,14 @@ app.post('/api/scan-image', async (req, res) => {
       const imgPrompt = `Malaysian anti-fraud specialist. Detect scam/fraud in this image.
 Lang: ${lang}. Write explanation+advice entirely in ${lang.toUpperCase()}.
 Detect: fake bank UIs, phishing SMS, OTP/PIN demands, suspicious URLs, fake receipts, LHDN/Maybank/Shopee impersonation.
+
+BANK RECEIPT REFERENCE NUMBER KNOWLEDGE (critical — do NOT trust logo alone):
+- Real Malaysian IBG/DuitNow/FPX: alphanumeric 8-18 characters (e.g. "RN2024050112345678")
+- Real UPI/Instant transfers: 12-digit Retrieval Reference Number (RRN)
+- Real SWIFT international wire: 16-20 digits
+- FAKE receipt red flags: reference under 8 digits, all-repeated digits (111111, 000000), no reference number at all, or reference that looks randomly typed
+- A Maybank/CIMB/RHB logo on the receipt does NOT prove it is real — scammers copy logos. Verify the reference number format.
+
 JSON ONLY: {"isScam":bool,"confidence":(1-99),"riskLevel":"Low|Medium|High","scamType":"string","explanation":"${explanationRule}","advice":["...","...","..."],"extractedText":"..."}`;
       if (!openai) throw new Error('OpenAI not configured');
       const response = await openai.chat.completions.create({
@@ -1048,8 +1083,21 @@ STRICT RULES:
 6. Each advice item must remain a separate array element
 7. Do NOT add or remove any fields`;
 
-    const result = await geminiGenerateWithRetry(prompt);
-    let responseText = result.response.text();
+    let responseText = '';
+    try {
+      const result = await geminiGenerateWithRetry(prompt);
+      responseText = result.response.text();
+    } catch (e) {
+      console.warn('[Translate] Gemini failed, trying OpenAI fallback:', e.message);
+      if (!openai) throw new Error('OpenAI not configured');
+      const openaiResponse = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        max_tokens: 500,
+        messages: [{ role: 'user', content: prompt }]
+      });
+      responseText = openaiResponse.choices[0].message.content;
+    }
+
     responseText = responseText.replace(/```json\n/g, '').replace(/```\n/g, '').replace(/```/g, '').trim();
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
 
