@@ -679,6 +679,7 @@ Respond JSON only:
         const openaiResponse = await openai.chat.completions.create({
           model: 'gpt-4o-mini',
           max_tokens: 350,
+          temperature: 0,
           messages: [{ role: 'user', content: prompt }]
         });
         aiResult = parseOpenAIJson(openaiResponse.choices[0].message.content);
@@ -950,6 +951,7 @@ CRITICAL: If language is 'ms', output Malay. If 'zh', output Chinese. If 'ta', o
         const openaiResponse = await openai.chat.completions.create({
           model: 'gpt-4o-mini',
           max_tokens: maxTokens,
+          temperature: 0,
           messages: [{ role: 'user', content: prompt }]
         });
         aiResult = parseOpenAIJson(openaiResponse.choices[0].message.content);
@@ -1074,6 +1076,7 @@ JSON ONLY: {"isScam":bool,"confidence":(1-99),"riskLevel":"Low|Medium|High","sca
       const response = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         max_tokens: maxTokens,
+        temperature: 0,
         messages: [{ role: 'user', content: [
           { type: 'text', text: imgPrompt },
           { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64Data}`, detail: 'low' } }
